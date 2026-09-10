@@ -1,3 +1,3 @@
 """unmount-doctor: explain why a Linux mount point or device is busy."""
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
