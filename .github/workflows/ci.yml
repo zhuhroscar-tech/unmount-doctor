@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  release:
+    types: [published]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install psmisc/lsof (fuser, lsof)
+        run: sudo apt-get update && sudo apt-get install -y psmisc lsof
+      - name: Install package
+        run: pip install -e .
+      - name: Run unit tests
+        run: python -m unittest discover -s tests -v
+      - name: Smoke test installed console script
+        run: |
+          unmount-doctor /tmp
+          unmount-doctor --version
+
+  build-artifact:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install build tooling
+        run: pip install build
+      - name: Build sdist + wheel
+        run: python -m build
+      - name: Build standalone Linux zipapp bundle
+        run: |
+          mkdir -p dist_bundle/unmount_doctor
+          cp -r src/unmount_doctor/* dist_bundle/unmount_doctor/
+          cat > dist_bundle/__main__.py << 'EOF'
+          from unmount_doctor.cli import main
+          if __name__ == "__main__":
+              raise SystemExit(main())
+          EOF
+          python -m zipapp dist_bundle -o dist/unmount-doctor.pyz -p "/usr/bin/env python3" -m "__main__:main"
+          chmod +x dist/unmount-doctor.pyz
+      - name: Compute checksums
+        run: |
+          cd dist
+          sha256sum *.whl *.tar.gz unmount-doctor.pyz > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+      - name: Smoke test the zipapp artifact
+        run: |
+          python3 dist/unmount-doctor.pyz --version
+          python3 dist/unmount-doctor.pyz /tmp
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unmount-doctor-dist
+          path: dist/
+
+  publish-release-assets:
+    if: github.event_name == 'release'
+    needs: build-artifact
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: unmount-doctor-dist
+          path: dist
+      - name: Upload assets to the GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
+            dist/unmount-doctor.pyz
+            dist/SHA256SUMS.txt
