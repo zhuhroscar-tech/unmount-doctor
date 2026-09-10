@@ -45,12 +45,8 @@ jobs:
         run: |
           mkdir -p dist_bundle/unmount_doctor
           cp -r src/unmount_doctor/* dist_bundle/unmount_doctor/
-          cat > dist_bundle/__main__.py << 'EOF'
-          from unmount_doctor.cli import main
-          if __name__ == "__main__":
-              raise SystemExit(main())
-          EOF
-          python -m zipapp dist_bundle -o dist/unmount-doctor.pyz -p "/usr/bin/env python3" -m "__main__:main"
+          printf 'from unmount_doctor.cli import main\nif __name__ == "__main__":\n    raise SystemExit(main())\n' > dist_bundle/__main__.py
+          python -m zipapp dist_bundle -o dist/unmount-doctor.pyz -p "/usr/bin/env python3"
           chmod +x dist/unmount-doctor.pyz
       - name: Compute checksums
         run: |
