@@ -170,7 +170,19 @@ def diagnose(target: str) -> DiagnosisResult:
         result.errors.append("`fuser` not found (install psmisc / util-linux).")
 
     if result.lsof_available:
-        rc, out, err = _run(["lsof", "+f", "--", target])
+        # `lsof +f` (file-system mode) only works when `target` is *exactly*
+        # a mount point; for any other directory it refuses with
+        # "not a file system" and produces nothing useful (see lsof(8) FAQ
+        # 3.21.3), even though --help explicitly documents this tool as
+        # accepting "Mount point, directory, or device path". For a
+        # directory we instead recurse with `lsof +D`, which lists every
+        # open file under it (mount point or plain directory alike). For a
+        # device node or regular file we use plain `lsof TARGET`, which
+        # lsof already matches by device/inode without needing +f.
+        if os.path.isdir(target):
+            rc, out, err = _run(["lsof", "+D", target])
+        else:
+            rc, out, err = _run(["lsof", "--", target])
         result.lsof_raw = out + err
         if "Permission denied" in err:
             result.permission_hint = True
