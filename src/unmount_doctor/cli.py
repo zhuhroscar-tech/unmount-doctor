@@ -26,6 +26,8 @@ import subprocess
 import sys
 from dataclasses import dataclass, field
 
+from .style import Style, resolve_style, status_headline
+
 # fuser's ACCESS column, per fuser(1). Not all letters are used on every
 # platform build, but this covers the common Linux util-linux/psmisc set.
 ACCESS_MEANINGS = {
@@ -203,26 +205,29 @@ def diagnose(target: str) -> DiagnosisResult:
     return result
 
 
-def format_report(result: DiagnosisResult) -> str:
+def format_report(result: DiagnosisResult, style: Style | None = None) -> str:
+    style = style if style is not None else Style(False)
     lines = []
-    lines.append(f"unmount-doctor report for: {result.target}")
-    lines.append("-" * 60)
+    lines.append(f"unmount-doctor report for: {style.bold(result.target)}")
 
     if not result.fuser_available and not result.lsof_available:
-        lines.append("Neither `fuser` nor `lsof` is installed — cannot diagnose.")
+        lines.append("")
+        lines.append(status_headline(style, "fail", "Neither `fuser` nor `lsof` is installed -- cannot diagnose."))
         lines.append("Install with e.g.: sudo apt install psmisc lsof")
         return "\n".join(lines)
 
     if not result.processes:
+        lines.append("")
         if result.permission_hint:
-            lines.append(
+            lines.append(status_headline(
+                style, "warn",
                 "No blocking processes found WITHOUT root privileges, but some "
-                "processes may be hidden. Re-run with sudo for a complete picture:"
-            )
-            lines.append(f"    sudo unmount-doctor {result.target}")
+                "processes may be hidden.",
+            ))
+            lines.append(f"Re-run with sudo for a complete picture:  sudo unmount-doctor {result.target}")
         else:
+            lines.append(status_headline(style, "ok", "No process appears to be holding this path open."))
             lines.append(
-                "No process appears to be holding this path open.\n"
                 "If `umount` still reports busy, check for:\n"
                 "  - a filesystem mounted *inside* this one (nested mount)\n"
                 "  - active swap on this device\n"
@@ -230,19 +235,21 @@ def format_report(result: DiagnosisResult) -> str:
                 "Try: findmnt -R " + result.target
             )
     else:
-        lines.append(f"{len(result.processes)} process(es) are keeping this busy:\n")
+        lines.append("")
+        lines.append(status_headline(
+            style, "warn", f"{len(result.processes)} process(es) are keeping this busy"
+        ))
         for p in result.processes:
             who = f"PID {p.pid}"
             if p.user:
                 who += f" (user {p.user})"
             cmd = p.command or "(unknown command)"
-            lines.append(f"  * {who} — {cmd}")
-            for reason in p.access_explanations():
-                lines.append(f"      -> {reason}")
-            if not p.access_explanations():
-                lines.append("      -> has an open reference here")
+            lines.append(f"\n  {style.bold(who)} -- {cmd}")
+            reasons = p.access_explanations() or ["has an open reference here"]
+            for reason in reasons:
+                lines.append(f"    {style.dim('->')} {reason}")
         lines.append("")
-        lines.append("Safe next steps:")
+        lines.append(style.dim("Safe next steps:"))
         lines.append("  1. If a listed process is a shell with its cwd here, `cd` elsewhere.")
         lines.append("  2. If it's an app (editor, file manager, media player), close it normally.")
         lines.append(
@@ -256,7 +263,7 @@ def format_report(result: DiagnosisResult) -> str:
 
     if result.errors:
         lines.append("")
-        lines.append("Notes:")
+        lines.append(style.dim("Notes:"))
         for e in result.errors:
             lines.append(f"  - {e}")
 
@@ -302,6 +309,7 @@ def main(argv=None) -> int:
         action="store_true",
         help="Do not prompt for confirmation on --kill/--force-kill/--lazy-unmount (scripting use)",
     )
+    parser.add_argument("--no-color", action="store_true", help="Disable colored output.")
     parser.add_argument("--version", action="version", version=f"unmount-doctor {__import__('unmount_doctor').__version__}")
 
     args = parser.parse_args(argv)
@@ -314,8 +322,9 @@ def main(argv=None) -> int:
             file=sys.stderr,
         )
 
+    style = resolve_style(no_color_flag=args.no_color)
     result = diagnose(args.target)
-    print(format_report(result))
+    print(format_report(result, style=style))
 
     exit_code = 0
 

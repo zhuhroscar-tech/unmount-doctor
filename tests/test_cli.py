@@ -135,6 +135,23 @@ class FormatReportTests(unittest.TestCase):
         self.assertIn("bash", report)
         self.assertIn("current working directory", report)
 
+    def test_default_style_is_plain_no_ansi(self):
+        from unmount_doctor.cli import DiagnosisResult
+
+        result = DiagnosisResult(target="/mnt/x", fuser_available=True, lsof_available=True)
+        result.processes = [BlockingProcess(pid="42", access="c", command="bash")]
+        report = format_report(result)
+        self.assertNotIn("\033[", report)
+
+    def test_explicit_style_can_enable_ansi(self):
+        from unmount_doctor.cli import DiagnosisResult
+        from unmount_doctor.style import Style
+
+        result = DiagnosisResult(target="/mnt/x", fuser_available=True, lsof_available=True)
+        result.processes = [BlockingProcess(pid="42", access="c", command="bash")]
+        report = format_report(result, style=Style(True))
+        self.assertIn("\033[", report)
+
 
 if __name__ == "__main__":
     unittest.main()
