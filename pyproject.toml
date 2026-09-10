@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "unmount-doctor"
-version = "0.1.1"
+version = "0.1.2"
 description = "Explain which process is holding a Linux mount point/path busy, and why."
 readme = "README.md"
 requires-python = ">=3.8"
