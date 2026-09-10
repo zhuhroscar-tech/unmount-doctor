@@ -89,6 +89,33 @@ class DiagnoseLiveTests(unittest.TestCase):
         result = diagnose("/nonexistent/path/for/unmount-doctor-tests")
         self.assertTrue(any("does not exist" in e for e in result.errors))
 
+    def test_diagnose_ordinary_directory_not_a_mount_point(self):
+        """Regression test: `lsof +f` only works on real mount points and
+        errors out with "not a file system" on an ordinary directory,
+        producing lsof's own usage/help text as stderr. Before this fix
+        that noisy usage text ended up in lsof_raw and no open files under
+        an ordinary (non-mount-point) directory were ever detected, even
+        though --help documents this tool as working on "Mount point,
+        directory, or device path"."""
+        with tempfile.TemporaryDirectory() as tmp:
+            sub = os.path.join(tmp, "sub")
+            os.mkdir(sub)
+            proc = subprocess.Popen(
+                [sys.executable, "-c", "import time; time.sleep(5)"],
+                cwd=sub,
+            )
+            try:
+                time.sleep(1.0)
+                result = diagnose(tmp)
+                # The old `lsof +f -- target` invocation fails on a plain
+                # (non-mount-point) directory and its stderr is lsof's own
+                # usage/help banner, never actual file info.
+                self.assertNotIn("usage:", result.lsof_raw.lower())
+                self.assertNotIn("not a file system", result.lsof_raw.lower())
+            finally:
+                proc.terminate()
+                proc.wait(timeout=5)
+
 
 class FormatReportTests(unittest.TestCase):
     def test_no_tools_available_message(self):
