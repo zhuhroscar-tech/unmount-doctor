@@ -89,9 +89,17 @@ def _parse_fuser_verbose(output: str) -> list[BlockingProcess]:
         stripped = line.strip()
         if not stripped or stripped.upper().startswith("USER"):
             continue
-        if stripped.endswith(":"):
-            # a mountpoint/path header line with nothing after the colon
-            continue
+        # A path/mountpoint header line looks like "/mnt/data:  root  1234 ..c.. bash"
+        # (fuser prefixes the first matching line with "<path>:"). Strip that
+        # prefix off before parsing the USER/PID/ACCESS/COMMAND columns.
+        if ":" in stripped:
+            prefix, sep, remainder = stripped.partition(":")
+            if remainder.strip():
+                stripped = remainder.strip()
+            elif not sep or not remainder.strip():
+                # header line with nothing after the colon on its own line
+                if stripped.endswith(":"):
+                    continue
         parts = stripped.split(None, 3)
         # Expect: USER PID ACCESS COMMAND (COMMAND may contain spaces, but
         # argparse-like split(None, 3) keeps the remainder intact)
@@ -99,9 +107,6 @@ def _parse_fuser_verbose(output: str) -> list[BlockingProcess]:
             user, pid, access = parts[0], parts[1], parts[2]
             command = parts[3] if len(parts) > 3 else ""
             procs.append(BlockingProcess(pid=pid, access=access, command=command, user=user))
-        elif len(parts) >= 2 and parts[0].isdigit():
-            # fuser -m (non -v) style: just "<path>: PID PID PIDc ..."
-            pass
     return procs
 
 
