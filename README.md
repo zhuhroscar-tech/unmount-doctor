@@ -1,11 +1,22 @@
 # unmount-doctor
 
+[![CI](https://github.com/zhuhroscar-tech/unmount-doctor/actions/workflows/ci.yml/badge.svg)](https://github.com/zhuhroscar-tech/unmount-doctor/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/zhuhroscar-tech/unmount-doctor?include_prereleases&label=release)](https://github.com/zhuhroscar-tech/unmount-doctor/releases)
+![Linux](https://img.shields.io/badge/platform-Linux-111111?logo=linux)
+
 A small, read-only-by-default CLI that explains **why** Linux says
 `umount: /mnt/x: target is busy` (or `device is busy`) instead of making you
 guess. It wraps the standard `fuser`/`lsof` utilities and turns their terse
 output into a human-readable report: which process, which user, and *why*
 it's blocking (open file, current directory, running executable, memory
 map, ...), plus safe next steps.
+
+## Simple explanation
+
+When Linux refuses to eject or unmount a drive because it says the drive is
+"busy", this tool tells you in plain English exactly which program is using
+it and why, instead of leaving you to guess or force-kill things blindly.
+It never changes anything unless you explicitly ask it to.
 
 ## Why this exists
 
