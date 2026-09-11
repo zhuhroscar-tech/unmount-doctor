@@ -89,25 +89,7 @@ unmount-doctor /mnt/usb
 
 ## Usage
 
-```bash
-$ unmount-doctor /mnt/usb
-unmount-doctor report for: /mnt/usb
-------------------------------------------------------------
-2 process(es) are keeping this busy:
-
-  * PID 4213 (user oscar) — bash
-      -> has this as its current working directory
-  * PID 4310 (user oscar) — tail
-      -> has an open file here for writing
-
-Safe next steps:
-  1. If a listed process is a shell with its cwd here, `cd` elsewhere.
-  2. If it's an app (editor, file manager, media player), close it normally.
-  3. Only if you understand the risk, ask this tool to signal a process:
-       unmount-doctor /mnt/usb --kill PID
-  4. As a last resort, a lazy unmount detaches now and finishes once handles close:
-       unmount-doctor /mnt/usb --lazy-unmount
-```
+![unmount-doctor example output](docs/images/example-output.png)
 
 Optional actions (never run without an explicit flag + confirmation):
 
