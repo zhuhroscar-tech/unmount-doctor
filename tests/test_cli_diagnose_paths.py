@@ -127,6 +127,54 @@ class DiagnoseErrorPathTests(unittest.TestCase):
             result = diagnose("/dev/sdb1")
         self.assertIn("6666", {p.pid for p in result.processes})
 
+    def test_lsof_row_for_pid_already_seen_by_fuser_keeps_fuser_command(self):
+        """Regression test for the "elif not procs_by_pid[pid].command"
+        merge branch in diagnose(): when fuser already identified a pid
+        with a command name, a later lsof row for the *same* pid must
+        not overwrite that command -- it should only backfill pids that
+        fuser reported without a resolvable command name."""
+        fuser_verbose = (
+            "/mnt/data:           root       7777 ..c.. real-bash-name\n"
+        )
+        lsof_output = (
+            "COMMAND   PID USER   FD   TYPE DEVICE SIZE/OFF NODE NAME\n"
+            "different-name 7777 root cwd    DIR  8,1     4096    2 /mnt/data\n"
+        )
+        table = {
+            ("fuser", "-vm"): (0, fuser_verbose, ""),
+            ("fuser", "-m"): (0, "", ""),
+            ("lsof", "+D"): (0, lsof_output, ""),
+        }
+        with mock.patch.object(cli, "_which", return_value=True), \
+             mock.patch("os.path.isdir", return_value=True), \
+             mock.patch.object(cli, "_run", side_effect=_run_side_effect(table)), \
+             mock.patch.object(cli, "_enrich_with_ps"):
+            result = diagnose("/mnt/data")
+        proc = next(p for p in result.processes if p.pid == "7777")
+        self.assertEqual(proc.command, "real-bash-name")
+
+    def test_lsof_row_for_pid_with_blank_fuser_command_gets_backfilled(self):
+        """Same merge branch, opposite outcome: fuser -m (plain mode)
+        reports a pid with no command (access-only), so the lsof row
+        for that same pid SHOULD backfill the command name."""
+        table = {
+            ("fuser", "-vm"): (0, "", ""),
+            ("fuser", "-m"): (0, "/mnt/data: 8888c\n", ""),
+            ("lsof", "+D"): (
+                0,
+                "COMMAND   PID USER   FD   TYPE DEVICE SIZE/OFF NODE NAME\n"
+                "backfilled-name 8888 root cwd    DIR  8,1     4096    2 /mnt/data\n",
+                "",
+            ),
+        }
+        with mock.patch.object(cli, "_which", return_value=True), \
+             mock.patch("os.path.isdir", return_value=True), \
+             mock.patch.object(cli, "_run", side_effect=_run_side_effect(table)), \
+             mock.patch.object(cli, "_enrich_with_ps"):
+            result = diagnose("/mnt/data")
+        proc = next(p for p in result.processes if p.pid == "8888")
+        self.assertEqual(proc.command, "backfilled-name")
+
 
 class FormatReportBranchTests(unittest.TestCase):
     def test_no_processes_with_permission_hint(self):
