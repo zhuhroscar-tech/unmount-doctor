@@ -62,6 +62,7 @@ class DiagnosisResult:
     processes: list = field(default_factory=list)
     errors: list = field(default_factory=list)
     permission_hint: bool = False
+    tool_error: bool = False
 
 
 def _which(cmd: str) -> bool:
@@ -160,6 +161,7 @@ def diagnose(target: str) -> DiagnosisResult:
         result.fuser_raw = out + err
         if rc not in (0, 1):
             result.errors.append(f"fuser exited with code {rc}: {err.strip()}")
+            result.tool_error = True
         if "Permission denied" in err or "you must be root" in err.lower():
             result.permission_hint = True
         parsed = _parse_fuser_verbose(out) or _parse_fuser_verbose(err)
@@ -225,6 +227,13 @@ def format_report(result: DiagnosisResult, style: Style | None = None) -> str:
                 "processes may be hidden.",
             ))
             lines.append(f"Re-run with sudo for a complete picture:  sudo unmount-doctor {result.target}")
+        elif result.tool_error:
+            lines.append(status_headline(
+                style, "warn",
+                "No blocking processes found, but a diagnostic tool failed -- "
+                "this result may be incomplete, not a confirmed all-clear.",
+            ))
+            lines.append("See Notes below for the tool error; consider re-running or checking manually.")
         else:
             lines.append(status_headline(style, "ok", "No process appears to be holding this path open."))
             lines.append(

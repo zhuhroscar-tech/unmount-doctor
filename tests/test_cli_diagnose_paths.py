@@ -142,6 +142,30 @@ class FormatReportBranchTests(unittest.TestCase):
         self.assertIn("Notes:", report)
         self.assertIn("something odd happened", report)
 
+    def test_tool_error_no_processes_does_not_claim_ok(self):
+        # Regression: before this fix, a fuser exit-code failure with zero
+        # parsed processes silently fell through to the "[OK] No process
+        # appears to be holding this path open" all-clear headline, giving a
+        # false sense of safety when the diagnosis was actually incomplete.
+        result = DiagnosisResult(target="/mnt/x", fuser_available=True, lsof_available=True, tool_error=True)
+        result.errors.append("fuser exited with code 2: some unexpected failure")
+        report = format_report(result)
+        self.assertNotIn("[OK] No process appears to be holding this path open.", report)
+        self.assertIn("may be incomplete, not a confirmed all-clear", report)
+
+    def test_diagnose_sets_tool_error_on_fuser_bad_exit(self):
+        table = {
+            ("fuser", "-vm"): (2, "", "some unexpected failure"),
+            ("fuser", "-m"): (1, "", ""),
+        }
+        with mock.patch.object(cli, "_which", side_effect=lambda c: c == "fuser"), \
+             mock.patch.object(cli, "_run", side_effect=_run_side_effect(table)), \
+             mock.patch.object(cli, "_enrich_with_ps"):
+            result = diagnose("/tmp")
+        self.assertTrue(result.tool_error)
+        report = format_report(result)
+        self.assertNotIn("[OK] No process appears to be holding this path open.", report)
+
 
 if __name__ == "__main__":
     unittest.main()
