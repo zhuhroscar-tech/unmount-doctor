@@ -6,3 +6,4 @@ dist_bundle/
 build/
 *.egg-info/
 .pytest_cache/
+.coverage
