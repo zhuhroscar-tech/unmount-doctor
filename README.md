@@ -1,159 +1,53 @@
+[![English](https://img.shields.io/badge/English-555555?style=flat)](README.md) [![简体中文](https://img.shields.io/badge/简体中文-555555?style=flat)](README.zh-CN.md)
+
 # unmount-doctor
 
-[![CI](https://github.com/zhuhroscar-tech/unmount-doctor/actions/workflows/ci.yml/badge.svg)](https://github.com/zhuhroscar-tech/unmount-doctor/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/zhuhroscar-tech/unmount-doctor?include_prereleases&label=release)](https://github.com/zhuhroscar-tech/unmount-doctor/releases)
-![Linux](https://img.shields.io/badge/platform-Linux-111111?logo=linux)
+Explain Linux's `umount: target is busy` error with a process-by-process report. `unmount-doctor` translates `fuser`/`lsof` output into the PID, user where available, command, and reason a path is in use: an open file, current directory, executable, memory map, or another reference.
 
-A small, read-only-by-default CLI that explains **why** Linux says
-`umount: /mnt/x: target is busy` (or `device is busy`) instead of making you
-guess. It wraps the standard `fuser`/`lsof` utilities and turns their terse
-output into a human-readable report: which process, which user, and *why*
-it's blocking (open file, current directory, running executable, memory
-map, ...), plus safe next steps.
+It is **read-only by default**. Optional process-signalling and lazy-unmount actions require explicit flags and confirmation.
 
-## Simple explanation
+## Install and inspect
 
-When Linux refuses to eject or unmount a drive because it says the drive is
-"busy", this tool tells you in plain English exactly which program is using
-it and why, instead of leaving you to guess or force-kill things blindly.
-It never changes anything unless you explicitly ask it to.
-
-## Why this exists
-
-"Target is busy" on `umount` is one of the most repeated Linux pain points
-across forums in every language — English, Chinese, and Japanese threads all
-show the same pattern: `fuser -vm` / `lsof` output is correct but cryptic,
-so people default to blindly force-killing things or using `umount -l`
-without understanding what they're detaching. See for example:
-
-- r/linuxquestions: "Attempting to unmount a USB drive and getting a busy error"
-  https://www.reddit.com/r/linuxquestions/comments/1nuat2c/
-- r/linuxquestions: "Target is busy when unmounting"
-  https://www.reddit.com/r/linuxquestions/comments/r5o326/
-- Unix & Linux Stack Exchange, "Busy Device on Umount" (62 upvotes, still
-  actively referenced): https://unix.stackexchange.com/questions/107885
-- General guides confirming `fuser -vm` / `lsof +f` are the standard but
-  low-level answer that most users don't run correctly on the first try:
-  https://thelinuxcode.com/umount-target-busy
-
-Existing solutions (`fuser`, `lsof`, `udiskie`) already exist and are not
-being replaced — `unmount-doctor` is a thin, honest translation layer on
-top of them for people who don't want to memorize the ACCESS column
-(`c`/`e`/`f`/`F`/`r`/`m`) every time. It changes nothing by default; killing
-a process or lazy-unmounting requires an explicit flag and confirmation.
-
-## Install
-
-Requires Python 3.8+ and a Linux system with `fuser` (psmisc) and,
-optionally, `lsof`. Both ship by default or via one package on virtually
-every distro:
+Requires Linux and Python 3.8+. Install `fuser` (usually the `psmisc` package); optional `lsof` adds detail. On Debian/Ubuntu:
 
 ```bash
-# Debian/Ubuntu
-sudo apt-get install -y psmisc lsof
-# Fedora/RHEL
-sudo dnf install -y psmisc lsof
-# Arch
-sudo pacman -S --needed psmisc lsof
-```
-
-### Option A — download the standalone artifact (no pip needed)
-
-Grab `unmount-doctor.pyz` from the
-[Releases page](https://github.com/zhuhroscar-tech/unmount-doctor/releases),
-verify the checksum, and run it directly with any Python 3.8+:
-
-```bash
-curl -LO https://github.com/zhuhroscar-tech/unmount-doctor/releases/latest/download/unmount-doctor.pyz
-curl -LO https://github.com/zhuhroscar-tech/unmount-doctor/releases/latest/download/SHA256SUMS.txt
-sha256sum -c SHA256SUMS.txt --ignore-missing
-chmod +x unmount-doctor.pyz
-./unmount-doctor.pyz /mnt/usb
-```
-
-### Option B — pip / pipx from the release wheel
-
-```bash
-pip install --user https://github.com/zhuhroscar-tech/unmount-doctor/releases/latest/download/unmount_doctor-0.1.0-py3-none-any.whl
+sudo apt-get install psmisc lsof
+git clone https://github.com/zhuhroscar-tech/unmount-doctor.git
+cd unmount-doctor
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e .
 unmount-doctor /mnt/usb
 ```
 
-### Option C — from source
+The target can be a mount point, directory, or device path. Run `unmount-doctor --help` for all flags. Standalone `.pyz` downloads are on [Releases](https://github.com/zhuhroscar-tech/unmount-doctor/releases); verify the matching release checksums before execution.
+
+## Resolve carefully
+
+Start by closing the listed application normally. If a shell is using the mount as its working directory, `cd` elsewhere. Inspect again before attempting a normal unmount.
+
+Only when you understand the consequences, these optional commands perform changes:
 
 ```bash
-git clone https://github.com/zhuhroscar-tech/unmount-doctor.git
-cd unmount-doctor
-pip install -e .
-unmount-doctor /mnt/usb
+unmount-doctor /mnt/usb --kill 4213       # SIGTERM; asks for confirmation
+unmount-doctor /mnt/usb --force-kill 4213 # SIGKILL; may lose unsaved data
+unmount-doctor /mnt/usb --lazy-unmount   # runs umount -l after confirmation
 ```
 
-## Usage
+Replace the example PID with one in the current report. Unknown PIDs are refused. `--yes` bypasses confirmation; avoid it for interactive troubleshooting. Lazy unmount detaches the filesystem namespace immediately but does not mean all references are closed or a drive is safe to unplug.
 
-![unmount-doctor example output](docs/images/example-output.png)
+## Limits and permissions
 
-Optional actions (never run without an explicit flag + confirmation):
+An empty report is not proof that a filesystem is idle. Other users' processes may be hidden without root privileges; tool errors can also leave incomplete evidence. Check nested mounts, swap, and loop devices if unmount still fails. Directory inspection through `lsof +D` can be expensive.
 
-```bash
-unmount-doctor /mnt/usb --kill 4213           # SIGTERM, asks y/N first
-unmount-doctor /mnt/usb --force-kill 4213     # SIGKILL, asks y/N first
-unmount-doctor /mnt/usb --lazy-unmount        # runs `umount -l`, asks y/N first
-unmount-doctor /mnt/usb --kill 4213 --yes     # non-interactive (scripts you trust)
-```
+The CLI is Linux-specific, has no telemetry or network calls, and uses your existing privileges. Diagnostic-only invocations can return `0` even with blockers or tool errors: read the report rather than using that exit code as a health signal.
 
-Some processes owned by other users are only visible to `fuser`/`lsof` when
-run as root; if the report is empty but `umount` still fails, re-run with
-`sudo unmount-doctor /mnt/usb`.
+## Preview and development
 
-## Privacy / permissions
-
-- No network access, no telemetry, no files written outside of what you
-  explicitly request with `--kill`/`--force-kill`/`--lazy-unmount`.
-- Runs entirely with your existing user privileges; only shows you what
-  `fuser`/`lsof` would already show, translated.
-- No secrets, no background services, no sudo required unless *you* choose
-  to run it as root to see other users' processes.
-
-## Supported platforms
-
-Linux only (relies on `/proc`, `fuser`, `lsof`, and `umount -l` semantics
-that don't exist on macOS/BSD in the same form). Tested on Ubuntu (GitHub
-Actions `ubuntu-latest` runner) with Python 3.9 and 3.12. Architecture:
-pure Python, no compiled extensions — runs on x86_64, arm64, or anything
-with a Python 3.8+ interpreter.
-
-## Uninstall
+[Example output](docs/images/example-output.png) · [Demo video](docs/demo.mp4)
 
 ```bash
-pip uninstall unmount-doctor        # if installed via pip
-rm unmount-doctor.pyz               # if using the standalone artifact
-```
-
-No config files, caches, or system changes are made, so there is nothing
-else to clean up.
-
-## Development / reproducing the build and tests
-
-```bash
-git clone https://github.com/zhuhroscar-tech/unmount-doctor.git
-cd unmount-doctor
-python3 -m venv .venv && source .venv/bin/activate
-pip install -e .
 python -m unittest discover -s tests -v
-
-# Build the same artifacts CI publishes:
-pip install build
-python -m build
-mkdir -p dist_bundle/unmount_doctor
-cp -r src/unmount_doctor/* dist_bundle/unmount_doctor/
-printf 'from unmount_doctor.cli import main\nif __name__ == "__main__":\n    raise SystemExit(main())\n' > dist_bundle/__main__.py
-python -m zipapp dist_bundle -o dist/unmount-doctor.pyz -p "/usr/bin/env python3"
-sha256sum dist/*.whl dist/*.tar.gz dist/unmount-doctor.pyz > dist/SHA256SUMS.txt
 ```
 
-CI (`.github/workflows/ci.yml`) runs the exact same steps on
-`ubuntu-latest` for every push/PR, and attaches the wheel, sdist, zipapp,
-and checksums to GitHub Releases automatically on publish.
-
-## License
-
-MIT — see [LICENSE](LICENSE).
+[Implementation](src/unmount_doctor/cli.py) · [CI](.github/workflows/ci.yml) · [MIT license](LICENSE)
