@@ -175,6 +175,39 @@ class DiagnoseErrorPathTests(unittest.TestCase):
         proc = next(p for p in result.processes if p.pid == "8888")
         self.assertEqual(proc.command, "backfilled-name")
 
+    def test_lsof_timeout_is_recorded_as_error_not_silent_ok(self):
+        """Regression: _run() maps subprocess.TimeoutExpired to rc=124 with
+        err="lsof: timed out" (see _run()'s except clause), and the
+        README itself documents "Directory inspection through `lsof +D`
+        can be expensive" -- i.e. the authors knew a large/busy directory
+        tree could make `lsof +D` slow enough to hit the 15s timeout.
+        Despite that, the lsof branch of diagnose() never inspected `rc`
+        at all (unlike the fuser branch just above it, which has an
+        explicit `if rc not in (0, 1): ... tool_error = True` check). A
+        timed-out lsof scan on a target with zero fuser-visible processes
+        therefore fell all the way through to the plain "[OK] No process
+        appears to be holding this path open." headline -- a false
+        all-clear on an incomplete diagnosis, the exact same bug class
+        already fixed for fuser in this same file."""
+        table = {
+            ("fuser", "-vm"): (0, "", ""),
+            ("fuser", "-m"): (0, "", ""),
+            ("lsof", "+D"): (124, "", "lsof: timed out"),
+        }
+        with mock.patch.object(cli, "_which", return_value=True), \
+             mock.patch("os.path.isdir", return_value=True), \
+             mock.patch.object(cli, "_run", side_effect=_run_side_effect(table)), \
+             mock.patch.object(cli, "_enrich_with_ps"):
+            result = diagnose("/mnt/data")
+        self.assertTrue(
+            result.tool_error,
+            "a timed-out lsof scan must not be treated as a completed, clean scan",
+        )
+        self.assertTrue(any("lsof" in e and "timed out" in e for e in result.errors))
+        report = format_report(result)
+        self.assertNotIn("[OK] No process appears to be holding this path open.", report)
+        self.assertIn("may be incomplete, not a confirmed all-clear", report)
+
 
 class FormatReportBranchTests(unittest.TestCase):
     def test_no_processes_with_permission_hint(self):

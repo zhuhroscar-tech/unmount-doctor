@@ -188,6 +188,21 @@ def diagnose(target: str) -> DiagnosisResult:
         else:
             rc, out, err = _run(["lsof", "--", target])
         result.lsof_raw = out + err
+        # lsof exits 1 both when it legitimately finds nothing (the common,
+        # healthy case) AND when it hit a real problem while scanning
+        # (e.g. a subdirectory it couldn't opendir(), or -- per this
+        # project's own README, "Directory inspection through `lsof +D`
+        # can be expensive" -- a timeout from _run()'s 15s budget, which
+        # surfaces as rc=124). A bare "no matches" rc=1 has empty stderr;
+        # a real scan failure has diagnostic text on stderr (WARNING/
+        # opendir/etc) or the timeout-specific rc=124. Permission-denied
+        # is handled separately below (via permission_hint, matching the
+        # fuser branch's existing convention) and is not itself a
+        # tool_error. This closes the same "silent false all-clear" bug
+        # class already fixed for the fuser branch just above.
+        if rc == 124 or rc not in (0, 1) or (rc == 1 and err.strip() and "Permission denied" not in err):
+            result.errors.append(f"lsof exited with code {rc}: {err.strip()}")
+            result.tool_error = True
         if "Permission denied" in err:
             result.permission_hint = True
         for line in out.splitlines()[1:]:
