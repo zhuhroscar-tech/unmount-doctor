@@ -167,6 +167,19 @@ def diagnose(target: str) -> DiagnosisResult:
         parsed = _parse_fuser_verbose(out) or _parse_fuser_verbose(err)
         if not parsed:
             rc2, out2, err2 = _run(["fuser", "-m", target])
+            # This fallback call had the exact same "silent false all-clear"
+            # gap already fixed for the primary `fuser -vm` call above and
+            # for `lsof` below: rc2 was never inspected, so a real failure
+            # on the plain-format fallback (unexpected exit code, e.g. a
+            # transient fuser/proc-scan error) fell straight through to
+            # "no processes parsed" and then to format_report()'s plain
+            # "[OK] No process appears to be holding this path open."
+            # headline -- a false all-clear on an incomplete diagnosis.
+            if rc2 not in (0, 1):
+                result.errors.append(f"fuser exited with code {rc2}: {err2.strip()}")
+                result.tool_error = True
+            if "Permission denied" in err2 or "you must be root" in err2.lower():
+                result.permission_hint = True
             parsed = _parse_fuser_plain(out2 + err2)
         for p in parsed:
             procs_by_pid[p.pid] = p

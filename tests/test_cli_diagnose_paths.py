@@ -85,6 +85,44 @@ class DiagnoseErrorPathTests(unittest.TestCase):
             result = diagnose("/tmp")
         self.assertEqual({p.pid for p in result.processes}, {"4242"})
 
+    def test_fuser_plain_fallback_unexpected_exit_code_recorded_as_error(self):
+        """Regression: the `fuser -m` fallback (used when `fuser -vm`
+        legitimately returns rc=0 with empty output) never inspected its
+        own return code, unlike the primary `fuser -vm` call and the
+        `lsof` call in this same function. A real failure on the
+        fallback call (unexpected exit code) fell straight through to
+        "no processes parsed" and then a plain "[OK]" all-clear -- the
+        exact same silent-false-all-clear bug class already fixed for
+        lsof (see acfe432)."""
+        table = {
+            ("fuser", "-vm"): (0, "", ""),
+            ("fuser", "-m"): (2, "", "fuser: some real fallback failure"),
+        }
+        with mock.patch.object(cli, "_which", side_effect=lambda c: c == "fuser"), \
+             mock.patch.object(cli, "_run", side_effect=_run_side_effect(table)), \
+             mock.patch.object(cli, "_enrich_with_ps"):
+            result = diagnose("/tmp")
+        self.assertTrue(
+            result.tool_error,
+            "an unexpected exit code from the fuser -m fallback must not be "
+            "treated as a completed, clean scan",
+        )
+        self.assertTrue(any("fuser exited with code 2" in e for e in result.errors))
+        report = format_report(result)
+        self.assertNotIn("[OK] No process appears to be holding this path open.", report)
+        self.assertIn("may be incomplete, not a confirmed all-clear", report)
+
+    def test_fuser_plain_fallback_permission_denied_sets_hint(self):
+        table = {
+            ("fuser", "-vm"): (0, "", ""),
+            ("fuser", "-m"): (1, "", "Permission denied"),
+        }
+        with mock.patch.object(cli, "_which", side_effect=lambda c: c == "fuser"), \
+             mock.patch.object(cli, "_run", side_effect=_run_side_effect(table)), \
+             mock.patch.object(cli, "_enrich_with_ps"):
+            result = diagnose("/tmp")
+        self.assertTrue(result.permission_hint)
+
     def test_fuser_unavailable_records_error(self):
         with mock.patch.object(cli, "_which", return_value=False), \
              mock.patch.object(cli, "_enrich_with_ps"):
