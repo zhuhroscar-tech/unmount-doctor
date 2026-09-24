@@ -20,7 +20,7 @@ python -m pip install -e .
 unmount-doctor /mnt/usb
 ```
 
-目标可以是挂载点、目录或设备路径。全部参数见 `unmount-doctor --help`。也可从 [Releases](https://github.com/zhuhroscar-tech/unmount-doctor/releases) 下载独立 `.pyz`，执行前请核对对应版本的校验和。
+目标可以是挂载点、目录或设备路径。全部参数见 `unmount-doctor --help`。也可从 [Releases](https://github.com/zhuhroscar-tech/unmount-doctor/releases) 下载独立 `.pyz`，执行前请核对对应版本的校验和。发布历史见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 谨慎处理占用
 

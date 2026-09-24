@@ -20,7 +20,7 @@ python -m pip install -e .
 unmount-doctor /mnt/usb
 ```
 
-The target can be a mount point, directory, or device path. Run `unmount-doctor --help` for all flags. Standalone `.pyz` downloads are on [Releases](https://github.com/zhuhroscar-tech/unmount-doctor/releases); verify the matching release checksums before execution.
+The target can be a mount point, directory, or device path. Run `unmount-doctor --help` for all flags. Standalone `.pyz` downloads are on [Releases](https://github.com/zhuhroscar-tech/unmount-doctor/releases); verify the matching release checksums before execution. See [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ## Resolve carefully
 
