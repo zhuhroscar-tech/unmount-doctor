@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.1.8 — 2026-09-25
+
+- Made release-tag CI explicit for `v*` tags so source-quality releases rerun the full validation path when tags are pushed.
+- Added repository-contract coverage for tag-triggered release validation.
+
 ## v0.1.7 — 2026-09-24
 
 - Added release-history documentation for the latest packaging metadata maintenance release.

@@ -2,8 +2,11 @@ __pycache__/
 *.pyc
 .venv/
 dist/
+dist_*/
 dist_bundle/
+dist_bundle_*/
 build/
 *.egg-info/
+.wheel-smoke-*/
 .pytest_cache/
 .coverage

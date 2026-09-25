@@ -54,6 +54,7 @@ class RepositoryContractTests(unittest.TestCase):
     def test_ci_builds_and_publishes_release_assets(self):
         ci = self._read(".github/workflows/ci.yml")
         for needle in [
+            'tags: ["v*"]',
             "python -m build",
             "python -m zipapp",
             "sha256sum *.whl *.tar.gz unmount-doctor.pyz",
